@@ -4,22 +4,31 @@
 #
 #   $ cat hoge.csv | ./batchcopy.py
 #
-#   Don't overwrite if destination exists.
-#
 #
 # FORMAT OF INPUT FILE
 #
-#    CSV should contain at least 3fields. 'source file', 'command' and
-#    'destination directory'. It doesn't care other fields, just ignore.
+#   CSV should contain at least 2fields. "opcode" and "operand".
+#   How many operands required is depending on opcode. for example, opecode
+#   "copy" needs 2 operands that are "surce filename" and "distination dir".
 #
-#    For now, available commands are 'copy' and 'ignore'.
 #
-#    ex)
+# AVAILABLE OPCODE
+#
+#    opcode       operand1           operand2          operand3
+#    --------+------------------+------------------+------------------+
+#    copy      source filename    dist dir           don't care
+#    rename    source filename    dist filename      don't care
+#    ignore    don't care         don't care         don't care
+#
+#
+# EXAMPLES
+#
 #      $ cat hoge.csv
-#      src/img000.jpg, copy, here/dst,
-#      src/readme.txt, copy, there/dst, this is test
+#      copy, src/img000.jpg, here/dst,
+#      copy, src/readme.txt, there/dst, this is test
+#      rename, oldname.csv, newname.csv, "oldname.csv is intact"
 #      # this is commnet.
-#      tmp/img001.txt, ignore, there/dst, this is test
+#      ignore, tmp/img001.txt, there/dst, this is test
 #
 #
 
@@ -30,64 +39,81 @@ import shutil
 
 ncmnt = 0
 nignr = 0
-nblnk = 0
+nlack = 0
 ncopy = 0
+nrenm = 0
 nukwn = 0
 nexst = 0
 
 for row in csv.reader(sys.stdin, delimiter=','):
-    src = ""
-    cmd = ""
-    dstdir = ""
+    opc = ""
+    opr1 = ""
+    opr2 = ""
     ix = 0
 
     for col in row:
         if 0 == ix:
-            src = row[0].strip()
+            opc = row[0].strip()
         elif 1 == ix:
-            cmd = row[1].strip()
+            opr1 = row[1].strip()
         elif 2 == ix:
-            dstdir = row[2].strip()
+            opr2 = row[2].strip()
 
         ix = ix + 1
 
     # comment ?
-    if src.startswith("#"):
+    if opr1.startswith("#"):
         ncmnt = ncmnt + 1
         continue
 
     # blank ?
-    if "" == src or "" == cmd or "" == dstdir:
-        nblnk = nblnk + 1
+    if "" == opc or "" == opr1 or "" == opr2:
+        nlack = nlack + 1
         continue
 
     # copy, ignore or unknown
-    if "copy" == cmd:
-        dstfname = dstdir + "/" + os.path.basename(src)
+    if "copy" == opc:
+        dstfname = opr2 + "/" + os.path.basename(opr1)
 
         # not exist? then make dir
-        if not os.path.exists(dstdir):
-            os.makedirs(dstdir)
+        if not os.path.exists(opr2):
+            os.makedirs(opr2)
 
         # not exist? then copy it
         if not os.path.exists(dstfname):
-            shutil.copyfile(src, dstfname)
-            print("copied: {} -> {}".format(src, dstdir))
+            shutil.copyfile(opr1, dstfname)
+            print("copied: {} -> {}".format(opr1, opr2))
             ncopy = ncopy + 1
         else:
-            print("exist: {} -> {}".format(src, dstdir))
+            print("exist: {} -> {}".format(opr1, opr2))
             nexst = nexst + 1
-    elif "ignore" == cmd:
-        print("ignored: {} -> {}".format(src, dstdir))
+    elif "rename" == opc:
+        dstfname = opr2
+        dirname = os.path.dirname(dstfname)
+
+        # not exist? then make dir
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+
+        # not exist? then rename it (source stays intact)
+        if not os.path.exists(dstfname):
+            shutil.copyfile(opr1, dstfname)
+            print("renamed: {} -> {}".format(opr1, opr2))
+            nrenm = nrenm + 1
+        else:
+            print("exist: {} -> {}".format(opr1, opr2))
+            nexst = nexst + 1
+    elif "ignore" == opc:
+        print("ignored: {} -> {}".format(opr1, opr2))
         nignr = nignr + 1
     else:
-        print("unknown: {}".format(cmd))
+        print("unknown: {}".format(opc))
         nukwn = nukwn + 1
 
     # flush for your preference, maybe it's a bit slow
     sys.stdout.flush()
 
-total = ncopy + nexst + nignr + ncmnt + nblnk + nukwn
+total = ncopy + nexst + nignr + ncmnt + nlack + nukwn
 print("copied {}, exist {}, ignored {}, "
       "comment {}, blank {}, unknown {}, out of total {}"
-      .format(ncopy, nexst, nignr, ncmnt, nblnk, nukwn, total))
+      .format(ncopy, nexst, nignr, ncmnt, nlack, nukwn, total))
