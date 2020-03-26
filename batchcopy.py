@@ -2,7 +2,11 @@
 #
 # USAGE
 #
-#   $ cat hoge.csv | ./batchcopy.py
+#   $ cat hoge.csv | ./batchcopy.py [ options ]
+#
+#   OPTION:
+#
+#     --dry-run
 #
 #
 # FORMAT OF INPUT FILE
@@ -36,6 +40,27 @@ import os
 import sys
 import csv
 import shutil
+
+
+# check commandline options
+dryrun = False
+for arg in sys.argv[1:]:
+    if "--dry-run" == arg:
+        dryrun = True
+    else:
+        print("unknown option: {}".format(arg))
+        exit(-1)
+
+
+def makedirs(dryrun,  name):
+    if dryrun is False:
+        os.makedirs(name)
+
+
+def copyfile(dryrun, src, dst):
+    if dryrun is False:
+        shutil.copyfile(src, dst)
+
 
 ncmnt = 0
 nignr = 0
@@ -71,17 +96,18 @@ for row in csv.reader(sys.stdin, delimiter=','):
         nlack = nlack + 1
         continue
 
-    # copy, ignore or unknown
+    # execute command
     if "copy" == opc:
         dstfname = opr2 + "/" + os.path.basename(opr1)
 
         # not exist? then make dir
         if not os.path.exists(opr2):
-            os.makedirs(opr2)
+            makedirs(dryrun, opr2)
 
         # not exist? then copy it
         if not os.path.exists(dstfname):
-            shutil.copyfile(opr1, dstfname)
+            copyfile(dryrun, opr1, dstfname)
+
             print("copied: {} -> {}".format(opr1, opr2))
             ncopy = ncopy + 1
         else:
@@ -92,12 +118,13 @@ for row in csv.reader(sys.stdin, delimiter=','):
         dirname = os.path.dirname(dstfname)
 
         # not exist? then make dir
-        if not os.path.exists(dirname):
-            os.makedirs(dirname)
+        if "" != dirname:
+            if not os.path.exists(dirname):
+                makedirs(dryrun, dirname)
 
         # not exist? then rename it (source stays intact)
         if not os.path.exists(dstfname):
-            shutil.copyfile(opr1, dstfname)
+            copyfile(dryrun, opr1, dstfname)
             print("renamed: {} -> {}".format(opr1, opr2))
             nrenm = nrenm + 1
         else:
@@ -113,7 +140,13 @@ for row in csv.reader(sys.stdin, delimiter=','):
     # flush for your preference, maybe it's a bit slow
     sys.stdout.flush()
 
+
+# status report
 total = ncopy + nexst + nignr + ncmnt + nlack + nukwn
-print("copied {}, exist {}, ignored {}, "
-      "comment {}, blank {}, unknown {}, out of total {}"
-      .format(ncopy, nexst, nignr, ncmnt, nlack, nukwn, total))
+message = "copied {}, exist {}, ignored {}," \
+          "comment {}, blank {}, unknown {}, total {}" \
+          .format(ncopy, nexst, nignr, ncmnt, nlack, nukwn, total)
+if dryrun is True:
+    message = message + " (DRY RUN)"
+
+print(message)
